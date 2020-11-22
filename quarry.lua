@@ -2,8 +2,6 @@ os.loadAPI("inventory")
 
 local dugSoFar = depth
 local hitBedrock = false
-local xOrientation = 1
-local yOrientation = 1
 local x = 0
 local y = 0
 local depth = 0
@@ -46,6 +44,15 @@ function refuel()
 end
 
 function position()
+	if orientation == NORTH then
+		x = x + 1
+	elseif orientation == EAST then
+		y = y + 1
+	elseif orientation == SOUTH then
+		x = x - 1
+	elseif orientation == WEST then
+		y = y - 1
+	end
 	s = "[" .. x .. ", " .. y .. ", " .. depth .. "]" -- Prints out coordinates relative to starting position. 0, 0, 0 being bottom left corner, highest altitude/depth 0
 	print(s)
 end
@@ -97,12 +104,11 @@ function setOrientation(value)
 	orientation = wOri -- Set orientation to new current orientation
 end
 
-function forward(pos)
+function forward()
 	while turtle.forward() == false do -- Tries to move forward, if not successful do the following
 		turtle.attack() -- Attack enemy blocking the way 
 		turtle.dig() -- Dig block obstructing the way
 	end
-	x = x + xOrientation * pos -- the pos parameter is a bit of a ghetto fix for me not wanting to rely too much on orientation since lua does not have switch statements
 	position()
 end
 	
@@ -175,10 +181,8 @@ end
 function goToPoint(_x, _y, _depth)
 	if x <= _x then
 		setOrientation(NORTH)
-		xOrientation = 1
 	else
 		setOrientation(SOUTH)
-		xOrientation = -1
 	end
 		
 	while x ~= _x do
@@ -187,15 +191,12 @@ function goToPoint(_x, _y, _depth)
 	
 	if y <= _y then
 		setOrientation(EAST)
-		yOrientation = 1
 	else
 		setOrientation(WEST)
-		yOrientation = -1
 	end
 		
 	while y ~= _y do
 		forward(0)
-		y = y + yOrientation
 	end
 	
 	while depth > _depth do
@@ -213,11 +214,13 @@ function returnToStart()
 	local _x = x
 	local _y = y
 	local _depth = depth
+	local _orientation = orientation
 	
 	
 	goToPoint(0, 0, 0)
 	if emptyInventoryIntoChest() then
 		goToPoint(_x, _y, _depth)
+		setOrientation(_orientation)
 		return true
 	else
 		setOrientation(NORTH)
@@ -240,9 +243,7 @@ position()
 			forward(1)
 			dig()
 		end
-		xOrientation = xOrientation * -1
 		if i ~= squareSize then -- Only need to turn around on last iteration
-			y = y + yOrientation
 			if switch == 0 then
 				setOrientation(orientation + 1) -- Rotate right
 				forward(0)
@@ -263,7 +264,6 @@ position()
 			
 	end
 	down()
-	yOrientation = yOrientation * -1
 	
 	local success, data = turtle.inspectDown()
 	if data.name ~= "minecraft:bedrock" then
@@ -280,9 +280,8 @@ position()
 	end
 end
 
-if #tArgs == 3 then
+if #tArgs == 4 then
 	goToPoint(goX, goY, goDepth)
-	returnToStart()
 end
 
 digArea(0) -- If this was called with 1 instead of 0 as the parameter, and the one on line 231 changed, it would simply go left instead of right
