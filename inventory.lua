@@ -3,20 +3,19 @@
 		"minecraft:stone",
 		"minecraft:gravel",
 		"minecraft:dirt",
-		"minecraft:flint",
 		"minecraft:red_flower",
 		"minecraft:yellow_flower",
+		"minecraft:apple",
 		"chisel:andesite",
 		"chisel:marble",
 		"chisel:limestone",
 		"chisel:diorite",
-		"Forestry:apatite",
+		"chisel:granite",
 		"Thaumcraft:ItemResource",
 		"Thaumcraft:blockCustomOre",
-		"Thaumcraft:apatite",
 		"Thaumcraft:ItemShard",
-		"IC2:blockOreUran",
 		"BiomesOPlenty:flowers2",
+		"Botania:mushroom"
 		}
 
 function isFull()
@@ -78,38 +77,29 @@ local isTrash
 		end
 	end
 end
-
-fixItemScatter()
-					
-						
 	
+function selectItem(s, itemSlot)
+	itemSlot = itemSlot or 1
+	for i=itemSlot, 16 do
+		local data  = turtle.getItemDetail(i)
+		if data then
+			if s == data.name then
+				turtle.select(i)
+				return true
+			end
+		end
+	end
+	return false
+end
 	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
+function getItemCount(s)
+	local count = 0
+	itemSlot = 1
+	while selectItem(s, itemSlot) do
+		itemSlot = turtle.getSelectedSlot() + 1
+		local data  = turtle.getItemDetail()
+		count = count + data.count
+	end
+	return count
+end
 	
