@@ -1,7 +1,5 @@
 os.loadAPI("inventory")
 
-local dugSoFar = depth
-local hitBedrock = false
 local x = 0
 local y = 0
 local depth = 0
@@ -13,18 +11,14 @@ local WEST = 3
 
 local orientation = NORTH
 
+local returning = false
 local switch = 0
 
 local tArgs = {...}
 squareSize = math.floor(tArgs[1]) -- For whatever reason, this won't work unless I floor.
 
-if #tArgs == 3 then
-	goX = math.floor(tArgs[1])
-	goY = math.floor(tArgs[2])
-	goDepth = math.floor(tArgs[3])
-end
-
 function refuel()
+	turtle.select(1)
 	local itemSlot = 1
 	while turtle.refuel() == false do
 		itemSlot = itemSlot + 1
@@ -37,7 +31,6 @@ function refuel()
 	end
 	
 	print "Found fuel."
-	turtle.refuel()
 	print "Adding fuel..."
 	
 	return true
@@ -104,32 +97,68 @@ function setOrientation(value)
 	orientation = wOri -- Set orientation to new current orientation
 end
 
-function forward()
-	while turtle.forward() == false do -- Tries to move forward, if not successful do the following
-		turtle.attack() -- Attack enemy blocking the way 
-		turtle.dig() -- Dig block obstructing the way
+function manageFuel()
+	if returning == false then
+		if turtle.getFuelLevel() <= fuelToGoToPoint(0, 0, 0) or turtle.getFuelLevel() == 0 then
+			local s1 = fuelToGoToPoint(0, 0, 0) .. " required to go back"
+			print(s1)
+			s2 = "Curent amount of fuel " .. turtle.getFuelLevel()
+			print(s2)
+			if refuel() == false then
+				print "Not enough fuel to continue, returning"
+				returning = true
+				goToPoint(0, 0, 0)
+				emptyInventoryIntoChest()				
+				setOrientation(NORTH)
+				print(s1)
+				print(s2)
+				return false
+			end
+		end
 	end
-	position()
+	return true
+end
+
+function forward()
+	if manageFuel() == false then
+		return false
+	else
+		while turtle.forward() == false do -- Tries to move forward, if not successful do the following
+			turtle.attack() -- Attack enemy blocking the way 
+			turtle.dig() -- Dig block obstructing the way
+		end
+		position()
+	end
+	return true
 end
 	
 function down()
-	local success, data = turtle.inspectDown() -- Check block below
-	if data.name ~= "minecraft:bedrock" then -- If it's not bedrock, try to dig down
-		while turtle.down() == false do
-			turtle.attackDown()
-			turtle.digDown()
+	if manageFuel() == false then
+		return false
+	else
+		local success, data = turtle.inspectDown() -- Check block below
+		if data.name ~= "minecraft:bedrock" then -- If it's not bedrock, try to dig down
+			while turtle.down() == false do
+				turtle.attackDown()
+				turtle.digDown()
+			end
+			depth = depth + 1
 		end
-		dugSoFar = depth
-		depth = depth + 1
 	end
+	return true
 end
 	
 function up()
-	while turtle.up() == false do
-		turtle.attackUp()
-		turtle.digUp()
+	if manageFuel() == false then
+		return false
+	else
+		while turtle.up() == false do
+			turtle.attackUp()
+			turtle.digUp()
+		end
+		depth = depth - 1
 	end
-	depth = depth - 1
+	return true
 end
 
 function invManagement()
@@ -160,8 +189,12 @@ function emptyInventoryIntoChest()
 		local success, data = turtle.inspect()
 		if success then
 			if data.name:find("Chest") or data.name:find("chest") then
+				setOrientation(orientation + 1)
+				inventory.fixItemScatter()
+				setOrientation(orientation - 1)
 				for i=1, 16 do
-					if turtle.getItemCount(i) > 0 then
+					local data = turtle.getItemDetail(i)
+					if data.count > 0 and data.name ~= "minecraft:coal"then
 						turtle.select(i)
 						turtle.drop()
 					end
@@ -174,40 +207,54 @@ function emptyInventoryIntoChest()
 	end
 	setOrientation(NORTH)
 	return false
-	
 end
 
 
 function goToPoint(_x, _y, _depth)
-	if x <= _x then
+	if turtle.getFuelLevel() >= fuelToGoToPoint(_x, _y, _depth) then
+		if x ~= _x then
+			if x <= _x then
+				setOrientation(NORTH)
+			else
+				setOrientation(SOUTH)
+			end
+				
+			while x ~= _x do
+				forward()
+			end
+		end
+		
+		if y ~= _y then
+			if y <= _y then
+				setOrientation(EAST)
+			else
+				setOrientation(WEST)
+			end
+				
+			while y ~= _y do
+				forward()
+			end
+		end
+		
+		while depth > _depth do
+			up()
+		end
+		
+		while depth < _depth do
+			down()
+		end
+		
 		setOrientation(NORTH)
+		return true
 	else
-		setOrientation(SOUTH)
+		local s = fuelToGoToPoint(_x, _y, _depth) .. " required to go back"
+		print(s)
+		s = "Curent amount of fuel " .. turtle.getFuelLevel()
+		print(s)
+		s = "Current depth is " .. depth
+		print(s)
+		return false
 	end
-		
-	while x ~= _x do
-		forward(1)
-	end
-	
-	if y <= _y then
-		setOrientation(EAST)
-	else
-		setOrientation(WEST)
-	end
-		
-	while y ~= _y do
-		forward(0)
-	end
-	
-	while depth > _depth do
-		up()
-	end
-	
-	while depth < _depth do
-		down()
-	end
-	
-	setOrientation(NORTH)
 end
 
 function returnToStart()
@@ -217,73 +264,119 @@ function returnToStart()
 	local _orientation = orientation
 	
 	
-	goToPoint(0, 0, 0)
-	if emptyInventoryIntoChest() then
-		goToPoint(_x, _y, _depth)
-		setOrientation(_orientation)
-		return true
+	if goToPoint(0, 0, 0) then
+		if emptyInventoryIntoChest() then
+			if goToPoint(_x, _y, _depth) then
+				setOrientation(_orientation)
+				return true
+			else
+				setOrientation(NORTH)
+				return false
+			end
+		else
+			setOrientation(NORTH)
+			return false
+		end
 	else
-		setOrientation(NORTH)
 		return false
 	end
+end
+
+function fuelToGoToPoint(_x, _y, _depth)
+	xDistance = x - _x
+	yDistance = y - _y
+	zDistance = depth - _depth
+	
+	xDistance = math.sqrt(xDistance * xDistance)
+	yDistance = math.sqrt(yDistance * yDistance)
+	zDistance = math.sqrt(zDistance * zDistance)
+	
+	return xDistance + yDistance + zDistance
 end
 	
 	
 function digArea(s) -- parameter because we need to turn in different manners depending on whether the size of the quarry is an even or an odd number
-switch = s -- Need to switch between rotating left and rotating right
-down()
-down()
-dig()
-position()
+	switch = s -- Need to switch between rotating left and rotating right
+	for i=1, 2 do
+		if down() == false then
+			return false
+		end
+	end
+	dig()
 	for i=1, squareSize do
 		for j=1, (squareSize - 1) do
-			if turtle.getFuelLevel() < 200 then
-				refuel()
+			if forward() == false then
+				return false
 			end
-			forward(1)
 			dig()
 		end
 		if i ~= squareSize then -- Only need to turn around on last iteration
 			if switch == 0 then
 				setOrientation(orientation + 1) -- Rotate right
-				forward(0)
+				if forward() == false then
+					return false
+				end
 				dig()
 				setOrientation(orientation + 1)
 				switch = 1
 			else
 				setOrientation(orientation - 1) -- Rotate left
-				forward(0)
+				if forward() == false then
+					return false
+				end
 				dig()
 				setOrientation(orientation - 1)
 				switch = 0
 			end
 		else
 			turnAround()
-			inventory.cleanInventory()
+			invManagement()
 		end
 			
 	end
-	down()
+	if down() == false then
+		return false
+	end
 	
 	local success, data = turtle.inspectDown()
 	if data.name ~= "minecraft:bedrock" then
 		if squareSize - math.floor(squareSize/2)*2 == 0 then -- That's basically a modulo operator, lua doesn't have one though so gotta implement your own, couldn't be bothered making a function for it
-			digArea(switch) -- Maintain pattern if even number
+			return digArea(switch) -- Maintain pattern if even number
 		else
-			digArea(0) -- Different pattern if odd
+			return digArea(0) -- Different pattern if odd
 		end
 	else
 		print "Hit bedrock, returning"
-		hitBedrock = true
 		goToPoint(0, 0, 0)
 		emptyInventoryIntoChest()
+		return true
 	end
 end
 
-if #tArgs == 4 then
-	goToPoint(goX, goY, goDepth)
+if turtle.getFuelLevel() == 0 then
+	if refuel() == false then
+		print "No fuel."
+	else
+		if #tArgs == 2 then
+			goToPoint(0, 0, tArgs[2])
+		end
+		if digArea(0) then
+			print "Finished."
+		else
+			print "Something went wrong."
+		end
+	end
+else
+	if #tArgs == 2 then
+		goToPoint(0, 0, math.floor(tArgs[2]))
+	end
+	if digArea(0) then
+		print "Finished."
+	else
+		print "Something went wrong."
+	end
 end
 
-digArea(0) -- If this was called with 1 instead of 0 as the parameter, and the one on line 231 changed, it would simply go left instead of right
--- And therefore start in the bottom right corner.
--- But then the returnToStart() function wouldn't work correctly anymore. I see no point in fixing that, to be honest.
+
+
+
